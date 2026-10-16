@@ -1,0 +1,4 @@
+[toolchain]
+channel = "stable"
+# i686 is needed for the 32-bit hook DLL (many older games are 32-bit).
+targets = ["x86_64-pc-windows-msvc", "i686-pc-windows-msvc"]

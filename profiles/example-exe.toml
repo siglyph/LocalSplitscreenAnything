@@ -1,0 +1,41 @@
+# Template for a DRM-free game launched straight from its executable. Copy, rename the file to
+# <id>.toml, and adjust. Placeholders: ${player} ${nickname} ${width} ${height} ${x} ${y}
+# ${instance_dir} ${monitor} ${session_id}
+
+[game]
+id = "example-exe"
+name = "Example (plain executable)"
+provider = "exe"
+path = "C:/Games/Example/Example.exe"
+# working_dir = "C:/Games/Example"
+max_players = 4
+
+[isolation]
+# `env` gives each instance its own APPDATA/LOCALAPPDATA/USERPROFILE/TEMP so saves and
+# settings do not collide (works for games that read those variables).
+mode = "env"
+
+[launch]
+args = ["-windowed", "-width", "${width}", "-height", "${height}"]
+stagger_ms = 3000
+
+[launch.window]
+# title_regex = "^Example"
+wait_ms = 60000
+
+[hooks]
+xinput = true
+fake_focus = true
+force_windowed = true
+lie_screen_size = true
+pin_window = true
+# Names of mutexes/events the game uses to refuse a second instance (find them with Process
+# Explorer > View > Lower Pane > Handles). `rename_all_handles = true` is the sledgehammer.
+rename_handles = []
+
+# [[patch]]
+# file = "${instance_dir}/profile/AppData/Roaming/Example/settings.ini"
+# format = "ini"
+# section = "Video"
+# set = { Fullscreen = 0, Width = "${width}", Height = "${height}" }
+# create_if_missing = true

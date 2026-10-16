@@ -1,0 +1,44 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/lsa-proto",
+    "crates/lsa-core",
+    "crates/lsa-cli",
+    "crates/lsa-hook",
+]
+# The hook DLL is Windows-only and built explicitly (see build.ps1), so the
+# everyday `cargo build` / `cargo test` only touches the host-buildable crates.
+default-members = ["crates/lsa-proto", "crates/lsa-core", "crates/lsa-cli"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+repository = "https://github.com/judecobler/LocalSplitscreenAnything"
+
+[workspace.dependencies]
+lsa-proto = { path = "crates/lsa-proto" }
+lsa-core = { path = "crates/lsa-core" }
+
+anyhow = "1"
+thiserror = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+toml = "0.8"
+regex = "1"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+clap = { version = "4", features = ["derive"] }
+windows = "0.61"
+
+[profile.release]
+debug = 1
+
+# Profile used for the injected hook DLL: never unwind across the FFI boundary
+# into a game, keep the binary small, and avoid codegen surprises.
+[profile.hook]
+inherits = "release"
+panic = "abort"
+opt-level = "s"
+lto = true
+codegen-units = 1

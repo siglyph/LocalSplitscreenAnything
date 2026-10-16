@@ -1,0 +1,19 @@
+[package]
+name = "lsa-cli"
+description = "Headless command line for LocalSplitscreenAnything (play, layouts, profiles, controllers)."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "lsa"
+path = "src/main.rs"
+
+[dependencies]
+lsa-core = { workspace = true }
+lsa-proto = { workspace = true }
+anyhow = { workspace = true }
+clap = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+ctrlc = "3"

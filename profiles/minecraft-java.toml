@@ -1,0 +1,45 @@
+# Minecraft Java Edition through Prism Launcher (https://prismlauncher.org).
+#
+# One-time setup, per player:
+#   1. In Prism, create an instance per player (names below), each with the Fabric loader and
+#      the Controlify mod (gamepad support; vanilla Minecraft has none).
+#   2. Add each player's Microsoft account in Prism (Accounts > Manage Accounts) and put the
+#      account's profile name in `accounts` below, in player order. Offline accounts work for
+#      LAN play on a server with online-mode=false.
+#   3. Inside each instance, open Controlify's settings once and pick that player's controller.
+# Then: lsa play minecraft-java -p 4 --layout grid
+#
+# Joining up: either player 1 opens their world to LAN (Esc > Open to LAN) and the others join
+# it from the Multiplayer screen, or run a local server and set `server` so every instance
+# joins automatically.
+
+default_layout = "grid"
+
+[game]
+id = "minecraft-java"
+name = "Minecraft (Java, Prism Launcher)"
+provider = "prism"
+max_players = 4
+notes = "Needs Prism Launcher, one instance per player, Controlify for gamepads."
+
+
+[hooks]
+# Minecraft keeps rendering and reading controllers when unfocused, so no DLL is needed.
+inject = false
+pin_window = true
+
+[launch]
+stagger_ms = 8000
+
+[launch.window]
+title_regex = "^Minecraft\\*? "
+wait_ms = 180000
+
+[prism]
+# launcher = "C:/Users/you/AppData/Local/Programs/PrismLauncher/prismlauncher.exe"
+# data_dir = "C:/Users/you/AppData/Roaming/PrismLauncher"
+instances = ["Player1", "Player2", "Player3", "Player4"]
+accounts = []
+# server = "127.0.0.1:25565"
+patch_options = true
+patch_instance_cfg = true

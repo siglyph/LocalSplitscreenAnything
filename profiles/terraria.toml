@@ -1,0 +1,40 @@
+# Terraria on Steam: real Steam client per player (player 1 on the host's Steam, players 2-4 in
+# Sandboxie boxes with their own Steam logins). Every player's account must own Terraria, or
+# the Steam Family must own one copy per concurrent player.
+#
+# Joining up: player 1 hosts (Multiplayer > Host & Play), the others join via Steam friends or
+# "Join via IP" to 127.0.0.1.
+
+default_layout = "grid"
+
+[game]
+id = "terraria"
+name = "Terraria"
+provider = "steam"
+steam_appid = 105600
+executable = "Terraria.exe"
+max_players = 4
+
+
+[isolation]
+mode = "sandboxie"
+
+[launch]
+stagger_ms = 10000
+
+[launch.window]
+title_regex = "^Terraria"
+wait_ms = 120000
+
+[hooks]
+xinput = true
+fake_focus = true
+pin_window = true
+
+# Terraria reads its window size from config.json. For boxed players this file lives inside
+# the box (Sandboxie's copy of %USERPROFILE%); patching boxed copies is part of milestone M2,
+# so until then set those players to windowed mode once by hand inside their box.
+[[patch]]
+file = "%USERPROFILE%/Documents/My Games/Terraria/config.json"
+format = "json"
+set = { Fullscreen = false, WindowMaximized = false, DisplayWidth = "${width}", DisplayHeight = "${height}" }

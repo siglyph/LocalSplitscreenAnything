@@ -1,0 +1,23 @@
+# Merged underneath every game profile. Only put values here that make sense for most games.
+# A game profile only needs to state what differs.
+
+[isolation]
+mode = "none"           # none | env | sandboxie
+instance_dir = "none"   # none | symlink | copy
+
+[launch]
+stagger_ms = 3000
+
+[launch.window]
+wait_ms = 60000
+
+[hooks]
+inject = true
+xinput = true
+fake_focus = true
+force_windowed = true
+lie_screen_size = true
+pin_window = true
+clip_cursor = false
+rename_handles = []
+rename_all_handles = false
