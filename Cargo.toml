@@ -14,7 +14,7 @@ default-members = ["crates/lsa-proto", "crates/lsa-core", "crates/lsa-cli"]
 version = "0.1.0"
 edition = "2021"
 license = "MIT"
-repository = "https://github.com/judecobler/LocalSplitscreenAnything"
+repository = "https://github.com/siglyph/LocalSplitscreenAnything"
 
 [workspace.dependencies]
 lsa-proto = { path = "crates/lsa-proto" }
