@@ -75,18 +75,22 @@ mod entry {
             hwnd: None,
             hooks_installed: Vec::new(),
             errors: Vec::new(),
+            debug: Vec::new(),
             updated_unix_ms: now_ms(),
         };
         let outcome = crate::hooks::install(&config);
         state.hooks_installed = outcome.installed;
         state.errors = outcome.errors;
+        state.debug = crate::hooks::debug_lines();
         let _ = crate::config::save_state(&dir, &state);
 
         // Live reload: the orchestrator rewrites instance.json on controller/viewport changes.
         let mut last_modified = crate::config::modified(&dir);
+        let mut ticks: u32 = 0;
         loop {
             std::thread::sleep(Duration::from_millis(250));
             crate::hooks::tick();
+            ticks += 1;
             let modified = crate::config::modified(&dir);
             if modified != last_modified {
                 last_modified = modified;
@@ -95,12 +99,18 @@ mod entry {
                     crate::hooks::update(&config);
                 }
             }
+            let mut dirty = false;
             if let Some(h) = crate::hooks::main_window() {
                 if state.hwnd != Some(h) {
                     state.hwnd = Some(h);
-                    state.updated_unix_ms = now_ms();
-                    let _ = crate::config::save_state(&dir, &state);
+                    dirty = true;
                 }
+            }
+            // Refresh the diagnostics roughly once a second so state.json stays current.
+            if dirty || ticks.is_multiple_of(4) {
+                state.debug = crate::hooks::debug_lines();
+                state.updated_unix_ms = now_ms();
+                let _ = crate::config::save_state(&dir, &state);
             }
         }
     }

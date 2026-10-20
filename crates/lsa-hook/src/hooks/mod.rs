@@ -32,6 +32,8 @@ pub mod dx;
 #[cfg(windows)]
 pub mod focus;
 #[cfg(windows)]
+pub mod iat;
+#[cfg(windows)]
 pub mod loader;
 
 /// What `install` managed to do.
@@ -126,6 +128,22 @@ pub fn tick() {
         window::on_main_window(h);
     }
     window::repin();
+    // Re-apply the XInput IAT patch: an overlay (Steam's, say) may have re-pointed the game's
+    // xinput imports to its own emulation after our first install.
+    if state::has(state::F_XINPUT) {
+        xinput::rescan();
+    }
+}
+
+/// Hook diagnostics for `state.json` (call counts, what the IAT patch captured).
+#[cfg(windows)]
+pub fn debug_lines() -> Vec<String> {
+    xinput::debug_lines()
+}
+
+#[cfg(not(windows))]
+pub fn debug_lines() -> Vec<String> {
+    Vec::new()
 }
 
 #[cfg(not(windows))]
