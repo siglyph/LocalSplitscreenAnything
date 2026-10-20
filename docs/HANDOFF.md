@@ -61,6 +61,22 @@ Plan agreed with Jude:
 1. Short term: set Steam > Settings > Controller > Desktop Layout to a Gamepad template for
    each pad; Steam then emits a virtual Xbox 360 pad per controller system-wide and
    `lsa controllers list` should show the slots. Enough for the first Minecraft test.
+   **Tested 2026-10-20: the desktop layout alone does nothing on this PC.** Steam creates no
+   virtual XInput device (no `VID_28DE&PID_11FF`, no `IG_` device); its log only says
+   "Steam Controller reserving XInput slot N", and it delivers those slots by hooking XInput
+   inside processes it launches (`gameoverlayrenderer64.dll` is injected and `xinput1_4.dll`
+   is hooked). What works: `dist\lsa.exe` added to Steam as a non-Steam game with launch
+   options `play minecraft-java -p 2 --layout left-right --assign`, launched via
+   `steam://rungameid/<id>`. Then `--assign` sees both Steam Controllers, and the hook is
+   inherited by Prism and javaw, so Controlify shows an "XInput Gamepad (GLFW)" in-game.
+   Every instance sees every pad until the M1 hook filters them; players pick their pad in
+   Controlify's settings for now. `lsa controllers list` from a plain shell still shows none.
+   Two more limits seen in that run: Steam switches to the desktop layout whenever a window
+   outside the lsa process tree gets focus (controller_ui.txt "OnFocusWindowChanged ...
+   Desktop"), and pad input to the instances stops until an instance is focused again; and
+   Controlify's `global.out_of_focus_input` defaults to false, so only the focused instance
+   reads pads at all (set to true in Player1/Player2 for now; the prism provider should write
+   it). Both are what the M1 hook (per-instance XInput filter + fake focus) is for.
 2. Then: give lsa its own input router (promote this from M4): read physical pads over HID
    (SDL3 covers DualSense/DualShock/Switch Pro/older Steam Controller) and emit one virtual
    Xbox pad per player through ViGEmBus; `controllers assign` listens on SDL devices. The
