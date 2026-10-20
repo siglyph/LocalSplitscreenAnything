@@ -1,9 +1,10 @@
 //! `lsa_hook{32,64}.dll`: injected into every game instance.
 //!
-//! Milestone M0 ships the scaffold: locate `instance.json` (through `LSA_INSTANCE_DIR` or next
-//! to the DLL), stay dormant in processes that are not the target executable, write
-//! `state.json`, and re-read the config when it changes. Milestone M1 adds the actual hooks in
-//! `hooks/` (XInput remap, fake focus, handle rename, window pinning / screen-size lies).
+//! Locates `instance.json` (through `LSA_INSTANCE_DIR` or next to the DLL), stays dormant in
+//! processes that are not the target executable, installs the hooks in `hooks/` (XInput
+//! remap, fake focus, handle rename, window pinning / screen-size lies, forced windowed
+//! rendering), writes `state.json`, and re-reads the config when it changes so controller
+//! and viewport changes apply live.
 //!
 //! Rules for code in this crate: `DllMain` must not block or load libraries (loader lock), so
 //! all work happens on a thread it spawns; nothing may unwind across the FFI boundary (the
@@ -84,7 +85,8 @@ mod entry {
         // Live reload: the orchestrator rewrites instance.json on controller/viewport changes.
         let mut last_modified = crate::config::modified(&dir);
         loop {
-            std::thread::sleep(Duration::from_millis(500));
+            std::thread::sleep(Duration::from_millis(250));
+            crate::hooks::tick();
             let modified = crate::config::modified(&dir);
             if modified != last_modified {
                 last_modified = modified;

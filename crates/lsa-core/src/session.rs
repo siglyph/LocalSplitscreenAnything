@@ -298,9 +298,7 @@ impl Session {
 
             let mut notes = iso.notes.clone();
             if profile.hooks.inject && iso.box_name.is_none() {
-                notes.push(
-                    "hook DLL injection for unsandboxed instances arrives with milestone M1".into(),
-                );
+                notes.push("hook DLL injected at startup (create suspended, LoadLibrary, resume)".into());
             }
 
             instances.push(Instance {

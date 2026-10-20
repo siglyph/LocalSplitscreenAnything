@@ -12,13 +12,20 @@ crate-type = ["cdylib"]
 [dependencies]
 lsa-proto = { workspace = true }
 serde_json = { workspace = true }
+regex-lite = "0.1"
 
 [dev-dependencies]
 tempfile = "3"
 
 [target.'cfg(windows)'.dependencies]
+# MinHook, compiled from its bundled C sources (needs cl.exe, i.e. a Developer shell).
+minhook-sys = "0.1.1"
 windows = { workspace = true, features = [
     "Win32_Foundation",
+    "Win32_Graphics_Direct3D9",
+    "Win32_Graphics_Dxgi",
+    "Win32_Graphics_Dxgi_Common",
+    "Win32_Graphics_Gdi",
     "Win32_System_LibraryLoader",
     "Win32_System_SystemServices",
     "Win32_System_Threading",

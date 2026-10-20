@@ -6,6 +6,7 @@
 //! over this crate.
 
 pub mod controllers;
+pub mod inject;
 pub mod ipc;
 pub mod isolation;
 pub mod layout;

@@ -1,0 +1,17 @@
+[package]
+name = "lsa-inject"
+description = "Loads the LocalSplitscreenAnything hook DLL into a game process of the same bitness (shared by lsa-core and the lsa-inject32 helper)."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[target.'cfg(windows)'.dependencies]
+windows = { workspace = true, features = [
+    "Win32_Foundation",
+    "Win32_Security",
+    "Win32_System_Diagnostics_Debug",
+    "Win32_System_Diagnostics_ToolHelp",
+    "Win32_System_LibraryLoader",
+    "Win32_System_Memory",
+    "Win32_System_Threading",
+] }
