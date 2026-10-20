@@ -77,6 +77,12 @@ Plan agreed with Jude:
    Controlify's `global.out_of_focus_input` defaults to false, so only the focused instance
    reads pads at all (set to true in Player1/Player2 for now; the prism provider should write
    it). Both are what the M1 hook (per-instance XInput filter + fake focus) is for.
+   **M1 verified on this PC 2026-10-20** (PR #1, commit 7462807): with lsa launched through
+   the Steam shortcut, two hooked `tools/xinput-probe` windows each see exactly one pad on
+   slot 0, a button held on pad 1 shows only in player 1's window, both report foreground
+   and a 1920x2160 screen. The remap only works because the hook patches the game's import
+   table; Steam's emulation bypasses plain export hooks. Not yet exercised: slot hot-swap,
+   handle rename, force_windowed on a real game, the 32-bit DLL and `lsa-inject32`.
 2. Then: give lsa its own input router (promote this from M4): read physical pads over HID
    (SDL3 covers DualSense/DualShock/Switch Pro/older Steam Controller) and emit one virtual
    Xbox pad per player through ViGEmBus; `controllers assign` listens on SDL devices. The
