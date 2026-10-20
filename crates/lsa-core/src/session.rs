@@ -501,9 +501,10 @@ impl Session {
         match window::wait_for_main_window(&query, timeout) {
             Some(w) => {
                 inst.hwnd = Some(w.hwnd);
-                if inst.pid.is_none() || inst.exe_name.is_some() {
-                    inst.pid = Some(w.pid);
-                }
+                // The window's owner is the game. The process we spawned may be a launcher
+                // (Prism, Steam) that handed off and exited, or that outlives the game; it is
+                // killed through `child`, while `pid` is what `stop` and `lsa stop` terminate.
+                inst.pid = Some(w.pid);
                 on_event(SessionEvent::WindowFound {
                     player: inst.player,
                     hwnd: w.hwnd,

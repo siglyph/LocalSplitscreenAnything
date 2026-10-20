@@ -9,8 +9,11 @@ Read this, then `docs/plan.md` (the approved architecture plan) and `README.md`.
 - Milestone M0 is scaffolded and pushed: `lsa-proto`, `lsa-core`, `lsa-cli`, hook DLL
   scaffold, profiles, docs, `build.ps1`. 44 unit tests pass; clippy is clean on macOS and on
   the Windows x64 target; the hook crate type-checks for i686. See `README.md` for layout.
-- Nothing has been exercised with a real game yet. A PC session ran `build.ps1` and
-  `lsa controllers list` successfully (build output was not relayed back in full).
+- Nothing has been exercised with a real game yet. Verified on the PC on 2026-10-19 at
+  8aa6626: `build.ps1`, `cargo test` (44 passed) and `cargo clippy --workspace --all-targets`
+  all exit 0 with no warnings; `monitors`, `layouts preview grid -p 4`, `layouts preview
+  big-left -p 3`, `controllers list`, `profiles list` and `play minecraft-java -p 2 --dry-run`
+  all exit 0. VS 2026 Build Tools (v18) work although `build.ps1` says 2022.
 - The M1 task (real hooks in `crates/lsa-hook` + an injector in `lsa-core`) has a detailed
   brief in the "Hook DLL" section of `docs/plan.md`; nothing of it is implemented. The
   `hooks/mod.rs` stubs report "not implemented yet (milestone M1)".
@@ -33,9 +36,17 @@ Read this, then `docs/plan.md` (the approved architecture plan) and `README.md`.
 - The clone was owned by BUILTIN\Administrators; git may need
   `-c safe.directory=C:/Users/Jude/Documents/LocalSplitscreenAnything` or a one-time
   `git config --global --add safe.directory ...`.
-- Windows reported ONE display at 1280x720 during a remote session; that is probably the
-  remote/headless adapter, not the physical monitor. Check `lsa monitors` at the real
-  resolution before judging window placement.
+- One physical display: `lsa monitors` prints `#0 DISPLAY1 3840x2160 at (0, 0) scale 3.00
+  primary`. The 1280x720 seen earlier was the logical size at 300% Windows scaling from a
+  DPI-unaware query; lsa opts into per-monitor DPI awareness and reports physical pixels.
+  Adapters: AMD Radeon iGPU and NVIDIA GeForce RTX 5090 (both 3840x2160) plus a "Meta Virtual
+  Monitor" adapter that is not enumerated as a display.
+- Prism instances `Player1` and `Player2` exist (created 2026-10-19): copies of Jude's
+  "Fabulously Optimized" 6.5.0-beta.3 instance (Minecraft 1.21.4, Fabric 0.16.10, Controlify
+  2.0.1, e4mc), `OverrideWindow=true`, `fullscreen:false`, `pauseOnLostFocus:false`, grouped
+  as "LSA". Prism has one Microsoft account (`koburas`); an offline account for player 2 is
+  being added, then `[prism].accounts` in `profiles/minecraft-java.toml` needs both names and
+  the LAN world must have Online Mode off.
 
 ## Controller finding (changes the near-term plan)
 
@@ -50,6 +61,22 @@ Plan agreed with Jude:
 1. Short term: set Steam > Settings > Controller > Desktop Layout to a Gamepad template for
    each pad; Steam then emits a virtual Xbox 360 pad per controller system-wide and
    `lsa controllers list` should show the slots. Enough for the first Minecraft test.
+   **Tested 2026-10-20: the desktop layout alone does nothing on this PC.** Steam creates no
+   virtual XInput device (no `VID_28DE&PID_11FF`, no `IG_` device); its log only says
+   "Steam Controller reserving XInput slot N", and it delivers those slots by hooking XInput
+   inside processes it launches (`gameoverlayrenderer64.dll` is injected and `xinput1_4.dll`
+   is hooked). What works: `dist\lsa.exe` added to Steam as a non-Steam game with launch
+   options `play minecraft-java -p 2 --layout left-right --assign`, launched via
+   `steam://rungameid/<id>`. Then `--assign` sees both Steam Controllers, and the hook is
+   inherited by Prism and javaw, so Controlify shows an "XInput Gamepad (GLFW)" in-game.
+   Every instance sees every pad until the M1 hook filters them; players pick their pad in
+   Controlify's settings for now. `lsa controllers list` from a plain shell still shows none.
+   Two more limits seen in that run: Steam switches to the desktop layout whenever a window
+   outside the lsa process tree gets focus (controller_ui.txt "OnFocusWindowChanged ...
+   Desktop"), and pad input to the instances stops until an instance is focused again; and
+   Controlify's `global.out_of_focus_input` defaults to false, so only the focused instance
+   reads pads at all (set to true in Player1/Player2 for now; the prism provider should write
+   it). Both are what the M1 hook (per-instance XInput filter + fake focus) is for.
 2. Then: give lsa its own input router (promote this from M4): read physical pads over HID
    (SDL3 covers DualSense/DualShock/Switch Pro/older Steam Controller) and emit one virtual
    Xbox pad per player through ViGEmBus; `controllers assign` listens on SDL devices. The
@@ -58,12 +85,10 @@ Plan agreed with Jude:
 
 ## Immediate next steps on the PC
 
-1. In a Developer PowerShell: `.\build.ps1`, `cargo test`, `cargo clippy --workspace --all-targets`.
-   Fix anything Windows-specific that the Mac could not catch (the windows crate 0.61 API was
-   only type-checked, never run).
-2. `dist\lsa.exe monitors`, `layouts preview grid -p 4`, `profiles list`,
-   `play minecraft-java -p 2 --dry-run`. Work through `docs/testing.md` (M0 section).
-3. Create two Prism instances named `Player1` and `Player2` (Fabric + Controlify), add the
-   accounts, then `dist\lsa.exe play minecraft-java -p 2 --layout left-right`. Expect to tune
-   `launch.window.title_regex`, `wait_ms` and the options.txt patches in `profiles/minecraft-java.toml`.
-4. Start M1 (hook DLL + injector) per `docs/plan.md`, then the input router above.
+1. Done 2026-10-19: build, tests, clippy and the dry-run CLI checks (see "State of the code").
+2. Done: Prism instances `Player1` and `Player2`. Remaining: the player-2 offline account and
+   `[prism].accounts`; Steam Desktop Layout set to a Gamepad template so `controllers list`
+   shows the pads; then the first real run, `dist\lsa.exe play minecraft-java -p 2 --layout
+   left-right`. Expect to tune `launch.window.title_regex`, `wait_ms` and the options.txt
+   patches in `profiles/minecraft-java.toml`. Work through `docs/testing.md` (M0 section).
+3. Start M1 (hook DLL + injector) per `docs/plan.md`, then the input router above.
