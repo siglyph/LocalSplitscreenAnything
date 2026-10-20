@@ -50,7 +50,10 @@ pub struct WindowQuery {
     pub preexisting_pids: HashSet<u32>,
 }
 
-/// Choose the best candidate: a title/class match wins, then the largest window.
+/// Choose the best candidate: a title/class match wins, then the largest window. When a
+/// title regex is given it is mandatory: a launcher's own windows (Prism's "Please wait...",
+/// Steam's "Preparing to launch...") live in the same process tree and must never be taken for
+/// the game.
 pub fn pick_main_window(candidates: &[WindowInfo], query: &WindowQuery) -> Option<WindowInfo> {
     let mut best: Option<(i32, i64, &WindowInfo)> = None;
     for w in candidates {
@@ -59,12 +62,10 @@ pub fn pick_main_window(candidates: &[WindowInfo], query: &WindowQuery) -> Optio
         }
         let mut score = 0;
         if let Some(re) = &query.title_regex {
-            if re.is_match(&w.title) {
-                score += 2;
-            } else if query.root_pid.is_none() && query.exe_name.is_none() {
-                // Title is the only evidence we have: require it.
+            if !re.is_match(&w.title) {
                 continue;
             }
+            score += 2;
         }
         if let Some(class) = &query.class {
             if w.class.eq_ignore_ascii_case(class) {
@@ -86,6 +87,11 @@ pub fn pick_main_window(candidates: &[WindowInfo], query: &WindowQuery) -> Optio
 }
 
 /// Poll until a main window matching `query` appears or `timeout` passes.
+///
+/// Candidates come from the root's process tree and/or processes named `exe_name`. If that
+/// yields no processes at all (no root, or the root was a launcher that exited after handing
+/// the launch to an already-running copy of itself, as Prism and Steam do) and a title regex
+/// is known, every window on the desktop is considered instead; the regex then decides.
 pub fn wait_for_main_window(query: &WindowQuery, timeout: Duration) -> Option<WindowInfo> {
     let start = Instant::now();
     loop {
@@ -100,10 +106,12 @@ pub fn wait_for_main_window(query: &WindowQuery, timeout: Duration) -> Option<Wi
                 }
             }
         }
-        let candidates: Vec<WindowInfo> =
-            if pids.is_empty() && query.root_pid.is_none() && query.exe_name.is_none() {
-                list_windows()
-            } else {
+        let title_only = pids.is_empty()
+            && query.exe_name.is_none()
+            && (query.root_pid.is_none() || query.title_regex.is_some());
+        let candidates: Vec<WindowInfo> = if title_only {
+            list_windows()
+        } else {
                 list_windows()
                     .into_iter()
                     .filter(|w| pids.contains(&w.pid))
@@ -596,11 +604,34 @@ mod tests {
             "regex match beats size"
         );
         q.exclude.insert(1);
+        assert!(
+            pick_main_window(&candidates, &q).is_none(),
+            "a regex is mandatory: no other window stands in for the excluded match"
+        );
+        q.title_regex = None;
         assert_eq!(
             pick_main_window(&candidates, &q).unwrap().hwnd,
             2,
             "excluded windows are skipped"
         );
+    }
+
+    #[test]
+    fn launcher_windows_in_the_tree_are_not_taken_for_the_game() {
+        // Prism shows "Please wait... - Prism Launcher" in the same process tree before the
+        // game window exists; it must not be picked while the regex does not match.
+        let candidates = vec![win(1, 10, "Please wait... - Prism Launcher 9.1", 400, 300)];
+        let q = WindowQuery {
+            root_pid: Some(10),
+            title_regex: Some(Regex::new(r"^Minecraft\*? ").unwrap()),
+            ..Default::default()
+        };
+        assert!(pick_main_window(&candidates, &q).is_none());
+        let later = vec![
+            win(1, 10, "Please wait... - Prism Launcher 9.1", 400, 300),
+            win(2, 11, "Minecraft* 1.21.4", 1920, 2160),
+        ];
+        assert_eq!(pick_main_window(&later, &q).unwrap().hwnd, 2);
     }
 
     #[test]
