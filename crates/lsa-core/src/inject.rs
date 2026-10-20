@@ -11,13 +11,45 @@
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
+use std::time::{Duration, Instant};
 
 use anyhow::Result;
+use lsa_proto::{INSTANCE_DIR_ENV, STATE_FILE};
 
 use crate::isolation::sandboxie::HookDlls;
 
 /// Name of the 32-bit injector helper the build places next to `lsa.exe`.
 pub const INJECT32_EXE: &str = "lsa-inject32.exe";
+
+/// How long to hold the game suspended waiting for the hook to report it is installed.
+pub const HOOK_READY_TIMEOUT: Duration = Duration::from_secs(5);
+
+/// The `state.json` the hook writes once its hooks are installed, derived from the
+/// `LSA_INSTANCE_DIR` we pass the game. `None` when the launch carries no instance dir.
+pub fn hook_ready_path(env: &BTreeMap<String, String>) -> Option<PathBuf> {
+    env.get(INSTANCE_DIR_ENV)
+        .filter(|d| !d.is_empty())
+        .map(|d| Path::new(d).join(STATE_FILE))
+}
+
+/// Poll until `path` exists or `timeout` passes. Returns how long it took when it appeared.
+///
+/// `LoadLibraryW` returns as soon as the DLL's `DllMain` does, and `DllMain` only spawns the
+/// thread that installs the hooks, so without this wait the game would be resumed while the
+/// hooks (and the process DPI awareness) are still being set up, and could create its window
+/// or read the screen size before they are in place.
+pub fn wait_for_hook(path: &Path, timeout: Duration) -> Option<Duration> {
+    let start = Instant::now();
+    loop {
+        if path.is_file() {
+            return Some(start.elapsed());
+        }
+        if start.elapsed() >= timeout {
+            return None;
+        }
+        std::thread::sleep(Duration::from_millis(25));
+    }
+}
 
 /// What to launch and inject into.
 #[derive(Debug, Clone)]
@@ -154,6 +186,20 @@ mod imp {
 
         // Inject, then always resume so a failed injection does not leave a frozen game.
         let inject_result = inject(pid, hooks, &mut notes);
+        if inject_result.is_ok() {
+            // The DLL is loaded but its hooks install on their own thread: hold the game
+            // until the hook reports in, so it runs none of its code unhooked.
+            match hook_ready_path(spawn.env) {
+                Some(ready) => match wait_for_hook(&ready, HOOK_READY_TIMEOUT) {
+                    Some(took) => notes.push(format!("hooks installed after {} ms", took.as_millis())),
+                    None => notes.push(format!(
+                        "hook did not report within {} s (wrong target_exe, or it stayed dormant); resumed anyway",
+                        HOOK_READY_TIMEOUT.as_secs()
+                    )),
+                },
+                None => notes.push("no LSA_INSTANCE_DIR in the launch env; not waiting for the hook".into()),
+            }
+        }
         unsafe {
             if ResumeThread(thread.0) == u32::MAX {
                 let _ = &process; // keep handle alive until here
@@ -226,5 +272,38 @@ mod tests {
     fn command_line_leaves_simple_args_bare() {
         let line = command_line(Path::new("game.exe"), &["-windowed".into()]);
         assert_eq!(line, "game.exe -windowed");
+    }
+
+    #[test]
+    fn hook_ready_path_comes_from_the_instance_dir_env() {
+        let mut env = BTreeMap::new();
+        assert_eq!(hook_ready_path(&env), None);
+        env.insert(INSTANCE_DIR_ENV.to_string(), String::new());
+        assert_eq!(hook_ready_path(&env), None, "empty dir is no dir");
+        env.insert(INSTANCE_DIR_ENV.to_string(), "C:/s/p2".to_string());
+        assert_eq!(
+            hook_ready_path(&env),
+            Some(Path::new("C:/s/p2").join(STATE_FILE))
+        );
+    }
+
+    #[test]
+    fn wait_for_hook_sees_a_file_that_appears_and_gives_up_otherwise() {
+        let dir = tempfile::tempdir().unwrap();
+        let missing = dir.path().join(STATE_FILE);
+        assert_eq!(wait_for_hook(&missing, Duration::from_millis(60)), None);
+
+        let appearing = dir.path().join("late.json");
+        let writer = {
+            let p = appearing.clone();
+            std::thread::spawn(move || {
+                std::thread::sleep(Duration::from_millis(80));
+                std::fs::write(p, "{}").unwrap();
+            })
+        };
+        let took = wait_for_hook(&appearing, Duration::from_secs(5)).expect("file appeared");
+        writer.join().unwrap();
+        assert!(took >= Duration::from_millis(50), "waited for it: {took:?}");
+        assert!(took < Duration::from_secs(5));
     }
 }

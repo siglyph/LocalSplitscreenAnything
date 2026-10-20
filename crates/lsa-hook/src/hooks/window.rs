@@ -178,6 +178,9 @@ mod imp {
     use windows::Win32::Foundation::{HWND, LPARAM, RECT};
     use windows::Win32::Graphics::Gdi::{DEVMODEA, DEVMODEW, MONITORINFO};
     use windows::Win32::System::Threading::GetCurrentProcessId;
+    use windows::Win32::UI::HiDpi::{
+        SetProcessDpiAwarenessContext, DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2,
+    };
     use windows::Win32::UI::WindowsAndMessaging::{
         EnumWindows, GetWindow, GetWindowLongW, GetWindowRect, GetWindowTextW,
         GetWindowThreadProcessId, IsWindow, IsWindowVisible, SetWindowLongW, GWL_EXSTYLE,
@@ -187,6 +190,24 @@ mod imp {
     use crate::detour_ptr;
     use crate::hooks::mh::{self, Orig};
     use crate::hooks::state;
+
+    /// Make this process per-monitor DPI aware, so every coordinate it sees and sets is a
+    /// physical pixel: the same space the orchestrator pins in and `instance.json`'s viewport
+    /// is expressed in. Without this, a DPI-unaware game at 300% scaling has its window
+    /// coordinates virtualised (logical = physical / 3): the viewport applied inside the
+    /// process lands three times too far out, the orchestrator re-pins it, we re-pin it, and
+    /// so on forever.
+    ///
+    /// Must run before the game creates its first window; the DLL's init thread starts while
+    /// the main thread is still suspended, so it does. Best effort: a game that already fixed
+    /// its awareness through its manifest keeps it (the call then fails harmlessly).
+    pub fn ensure_process_dpi_aware() {
+        use std::sync::Once;
+        static ONCE: Once = Once::new();
+        ONCE.call_once(|| unsafe {
+            let _ = SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
+        });
+    }
 
     type CreateWindowExWFn = unsafe extern "system" fn(
         u32, *const u16, *const u16, u32, i32, i32, i32, i32,
@@ -710,7 +731,10 @@ mod imp {
 }
 
 #[cfg(windows)]
-pub use imp::{install, on_config_changed, on_main_window, refresh_main_window, repin};
+pub use imp::{
+    ensure_process_dpi_aware, install, on_config_changed, on_main_window, refresh_main_window,
+    repin,
+};
 
 #[cfg(test)]
 mod tests {

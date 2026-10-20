@@ -59,7 +59,29 @@ impl<T: Copy> Default for Orig<T> {
 mod imp {
     use super::Orig;
     use std::ffi::{c_void, CStr, CString};
+    use std::sync::atomic::{AtomicBool, Ordering};
     use std::sync::Once;
+
+    /// While set, new hooks are only queued; [`apply_queued`] enables them all in one go.
+    /// Every `MH_EnableHook` freezes all threads of the process, so enabling the ~70
+    /// install-time hooks one by one costs well over a second; one batch costs one freeze.
+    static BATCHING: AtomicBool = AtomicBool::new(false);
+
+    /// Queue instead of enabling hooks created from now on, until [`apply_queued`].
+    pub fn begin_batch() {
+        BATCHING.store(true, Ordering::SeqCst);
+    }
+
+    /// Enable every queued hook with a single thread freeze and leave batch mode.
+    pub fn apply_queued() -> Result<(), String> {
+        BATCHING.store(false, Ordering::SeqCst);
+        let s = unsafe { mh::MH_ApplyQueued() };
+        if s == mh::MH_OK {
+            Ok(())
+        } else {
+            Err(format!("MH_ApplyQueued: {}", status_text(s)))
+        }
+    }
 
     use minhook_sys as mh;
     use windows::core::{PCSTR, PCWSTR};
@@ -136,11 +158,15 @@ mod imp {
             return Err(format!("MH_CreateHook({target:p}): {}", status_text(s)));
         }
         orig.set(original);
-        let s = mh::MH_EnableHook(target);
+        let (s, what) = if BATCHING.load(Ordering::SeqCst) {
+            (mh::MH_QueueEnableHook(target), "MH_QueueEnableHook")
+        } else {
+            (mh::MH_EnableHook(target), "MH_EnableHook")
+        };
         if s != mh::MH_OK {
             let _ = mh::MH_RemoveHook(target);
             orig.set(std::ptr::null_mut());
-            return Err(format!("MH_EnableHook({target:p}): {}", status_text(s)));
+            return Err(format!("{what}({target:p}): {}", status_text(s)));
         }
         Ok(())
     }

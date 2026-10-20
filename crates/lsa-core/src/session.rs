@@ -97,6 +97,21 @@ pub struct Instance {
     exe_name: Option<String>,
     title_regex: Option<Regex>,
     preexisting_pids: HashSet<u32>,
+    /// Window rect observed right after our last re-pin (see `should_repin`).
+    rect_after_pin: Option<PixelRect>,
+}
+
+/// Whether the session loop should pin a window that currently sits at `current` back to
+/// `viewport`. Never when it is already there; and not when it sits exactly where our last
+/// pin left it, because repeating an identical pin that did not take only produces a loop
+/// (the in-process hook pins the same window, and without matching DPI awareness the two
+/// disagree about where "the viewport" is).
+pub fn should_repin(
+    current: PixelRect,
+    viewport: PixelRect,
+    rect_after_pin: Option<PixelRect>,
+) -> bool {
+    current != viewport && rect_after_pin != Some(current)
 }
 
 /// Progress callback payload.
@@ -320,6 +335,7 @@ impl Session {
                 exe_name: None,
                 title_regex: title_regex.clone(),
                 preexisting_pids: HashSet::new(),
+                rect_after_pin: None,
             });
         }
         instances.sort_by_key(|i| i.player);
@@ -565,9 +581,13 @@ impl Session {
                 }
                 if pin {
                     if let Some(rect) = window::window_rect(h) {
-                        if rect != inst.viewport
+                        if should_repin(rect, inst.viewport, inst.rect_after_pin)
                             && window::place_window(h, inst.viewport, topmost).is_ok()
                         {
+                            // Remember where the pin left the window: if it stays exactly
+                            // there, repeating the same pin cannot help (another pinner
+                            // disagrees in a different DPI space, say), so stop looping.
+                            inst.rect_after_pin = window::window_rect(h);
                             events.push(SessionEvent::Positioned {
                                 player: inst.player,
                                 rect: inst.viewport,
@@ -593,6 +613,7 @@ impl Session {
         for inst in &mut self.instances {
             if let Some(rv) = resolved.iter().find(|r| r.player == inst.player) {
                 inst.viewport = rv.rect;
+                inst.rect_after_pin = None;
                 inst.monitor = rv.monitor;
                 if let Ok(mut cfg) = ipc::read_instance_config(&inst.dir) {
                     cfg.viewport = rv.rect;
@@ -848,6 +869,27 @@ create_if_missing = true
         ];
         let err = Session::plan(profile, dup, layout, monitors(), options).unwrap_err();
         assert!(err.to_string().contains("player numbers"));
+    }
+
+    #[test]
+    fn repin_only_when_moved_and_not_where_the_last_pin_left_it() {
+        let viewport = PixelRect::new(0, 0, 1920, 2160);
+        let drifted = PixelRect::new(100, 50, 1920, 2160);
+        let scaled = PixelRect::new(0, 0, 5760, 6480);
+        assert!(!should_repin(viewport, viewport, None), "already in place");
+        assert!(should_repin(drifted, viewport, None), "game moved it");
+        assert!(
+            should_repin(drifted, viewport, Some(viewport)),
+            "moved since our pin landed"
+        );
+        assert!(
+            !should_repin(scaled, viewport, Some(scaled)),
+            "our pin left it here; pinning again would loop"
+        );
+        assert!(
+            should_repin(drifted, viewport, Some(scaled)),
+            "somewhere new again: try once more"
+        );
     }
 
     #[test]

@@ -60,10 +60,15 @@ impl InstallOutcome {
 pub fn install(config: &InstanceConfig) -> InstallOutcome {
     let mut outcome = InstallOutcome::default();
     state::set(config);
+    // Before anything else and before the game makes a window: put this process in the same
+    // (physical-pixel) coordinate space the orchestrator pins in. See `window`.
+    window::ensure_process_dpi_aware();
     if let Err(e) = mh::init() {
         outcome.errors.push(e);
         return outcome;
     }
+    // Queue every hook below and enable them with one thread freeze at the end.
+    mh::begin_batch();
     let f = &config.hooks;
     let wants_window = f.pin_window || f.lie_screen_size || f.force_windowed || f.clip_cursor;
     let wants_handles = !f.rename_handles.is_empty() || f.rename_all_handles;
@@ -86,6 +91,9 @@ pub fn install(config: &InstanceConfig) -> InstallOutcome {
     }
     if f.force_windowed {
         outcome.record("force_windowed", dx::install());
+    }
+    if let Err(e) = mh::apply_queued() {
+        outcome.errors.push(e);
     }
     outcome
 }
