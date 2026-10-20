@@ -149,6 +149,9 @@ pub struct InstanceState {
     pub hwnd: Option<u64>,
     pub hooks_installed: Vec<String>,
     pub errors: Vec<String>,
+    /// Free-form hook diagnostics (call counts, what the IAT patch captured). Not load-bearing.
+    #[serde(default)]
+    pub debug: Vec<String>,
     pub updated_unix_ms: u64,
 }
 

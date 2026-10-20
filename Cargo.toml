@@ -5,10 +5,19 @@ members = [
     "crates/lsa-core",
     "crates/lsa-cli",
     "crates/lsa-hook",
+    "crates/lsa-inject",
+    "crates/lsa-inject32",
 ]
-# The hook DLL is Windows-only and built explicitly (see build.ps1), so the
-# everyday `cargo build` / `cargo test` only touches the host-buildable crates.
-default-members = ["crates/lsa-proto", "crates/lsa-core", "crates/lsa-cli"]
+# The hook DLL and the 32-bit injector helper are built explicitly for specific
+# targets (see build.ps1), so the everyday `cargo build` / `cargo test` only
+# touches the host-buildable crates. `lsa-inject` stays in the default set: it is
+# a dependency of `lsa-core` and its pure helpers are unit-tested on the host.
+default-members = [
+    "crates/lsa-proto",
+    "crates/lsa-core",
+    "crates/lsa-cli",
+    "crates/lsa-inject",
+]
 
 [workspace.package]
 version = "0.1.0"
@@ -19,6 +28,7 @@ repository = "https://github.com/siglyph/LocalSplitscreenAnything"
 [workspace.dependencies]
 lsa-proto = { path = "crates/lsa-proto" }
 lsa-core = { path = "crates/lsa-core" }
+lsa-inject = { path = "crates/lsa-inject" }
 
 anyhow = "1"
 thiserror = "2"

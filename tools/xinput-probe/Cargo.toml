@@ -1,0 +1,25 @@
+# Standalone (own workspace) so it stays out of the main build; it is a manual M1 test tool,
+# not shipped. Build for both bitnesses to exercise both hook DLLs:
+#   cargo build --release --target x86_64-pc-windows-msvc
+#   cargo build --release --target i686-pc-windows-msvc
+[workspace]
+
+[package]
+name = "xinput-probe"
+description = "Manual M1 test: a window that shows which XInput pad it sees, whether it thinks it is focused, and what screen size it detects."
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+
+[[bin]]
+name = "xinput-probe"
+path = "src/main.rs"
+
+[dependencies]
+windows = { version = "0.61", features = [
+    "Win32_Foundation",
+    "Win32_Graphics_Gdi",
+    "Win32_System_LibraryLoader",
+    "Win32_UI_Input_XboxController",
+    "Win32_UI_WindowsAndMessaging",
+] }

@@ -1,0 +1,13 @@
+[package]
+name = "lsa-inject32"
+description = "Tiny 32-bit helper: load the LocalSplitscreenAnything hook DLL into a 32-bit game, since the 64-bit orchestrator cannot inject across bitness."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "lsa-inject32"
+path = "src/main.rs"
+
+[dependencies]
+lsa-inject = { path = "../lsa-inject" }
