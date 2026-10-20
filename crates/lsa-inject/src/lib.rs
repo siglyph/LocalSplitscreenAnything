@@ -46,7 +46,7 @@ mod imp {
         VirtualAllocEx, VirtualFreeEx, MEM_COMMIT, MEM_RELEASE, MEM_RESERVE, PAGE_READWRITE,
     };
     use windows::Win32::System::Threading::{
-        CreateRemoteThread, IsWow64Process, OpenProcess, WaitForSingleObject,
+        CreateRemoteThread, GetExitCodeThread, IsWow64Process, OpenProcess, WaitForSingleObject,
         LPTHREAD_START_ROUTINE, PROCESS_CREATE_THREAD, PROCESS_QUERY_INFORMATION,
         PROCESS_VM_OPERATION, PROCESS_VM_READ, PROCESS_VM_WRITE,
     };
@@ -104,7 +104,23 @@ mod imp {
     }
 
     /// Base address of the module named `file_name` (lower-case) in process `pid`, if present.
+    ///
+    /// A module-list snapshot races with the loader and transiently fails with
+    /// `ERROR_BAD_LENGTH`, so retry a few times. This is best-effort reporting only; success is
+    /// decided by the remote thread's exit code, not by this.
     fn remote_module_base(pid: u32, file_name: &str) -> Option<u64> {
+        for attempt in 0..6 {
+            if let Some(base) = module_base_once(pid, file_name) {
+                return Some(base);
+            }
+            if attempt < 5 {
+                std::thread::sleep(std::time::Duration::from_millis(20));
+            }
+        }
+        None
+    }
+
+    fn module_base_once(pid: u32, file_name: &str) -> Option<u64> {
         unsafe {
             let snap =
                 CreateToolhelp32Snapshot(TH32CS_SNAPMODULE | TH32CS_SNAPMODULE32, pid).ok()?;
@@ -192,21 +208,29 @@ mod imp {
                     wait.0
                 ));
             }
-            Ok(())
+            // LoadLibraryW's return (the HMODULE) becomes the thread's exit code: non-zero on
+            // success, null on failure. This is the authoritative, race-free success signal
+            // (the module-list snapshot below is only for reporting the full base address).
+            let mut exit_code = 0u32;
+            unsafe { GetExitCodeThread(thread.0, &mut exit_code) }
+                .map_err(|e| format!("GetExitCodeThread: {e}"))?;
+            Ok(exit_code)
         })();
 
         unsafe {
             let _ = VirtualFreeEx(proc.0, remote, 0, MEM_RELEASE);
         }
-        result?;
-
-        let base = remote_module_base(pid, &dll_file_name(dll_path));
-        if base.is_none() {
+        let exit_code = result?;
+        if exit_code == 0 {
             return Err(format!(
-                "LoadLibraryW ran but {} is not loaded in pid {pid}",
+                "remote LoadLibraryW returned null in pid {pid}: {} failed to load",
                 dll_file_name(dll_path)
             ));
         }
+
+        // Prefer the real base from the module list; fall back to the (low 32 bits of the)
+        // HMODULE the thread returned, which is the whole base for a 32-bit target.
+        let base = remote_module_base(pid, &dll_file_name(dll_path)).or(Some(exit_code as u64));
         Ok(Injected { module_base: base })
     }
 }

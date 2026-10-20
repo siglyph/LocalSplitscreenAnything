@@ -80,7 +80,8 @@ mod imp {
     static CALLS_IAT: [AtomicU64; N] = [const { AtomicU64::new(0) }; N];
     /// Function the IAT slot pointed at before we patched it (the emulation to call through).
     static IAT_ORIG: [AtomicPtr<c_void>; N] = [const { AtomicPtr::new(std::ptr::null_mut()) }; N];
-    static IAT_PATCHED: AtomicUsize = AtomicUsize::new(0);
+    /// Matching IAT slots currently pointing at our detours, as of the last scan.
+    static IAT_HOOKED_SLOTS: AtomicUsize = AtomicUsize::new(0);
     static IAT_SCANS: AtomicU64 = AtomicU64::new(0);
 
     fn target(user: u32) -> Option<u32> {
@@ -220,24 +221,30 @@ mod imp {
             iat_detour(XiFn::GetBattery),
             iat_detour(XiFn::GetKeystroke),
         ];
-        let mut patched = 0usize;
+        // Count the matching slots we own after this scan (not just ones newly written), so
+        // the gauge reads sensibly once we are established rather than dropping back to zero.
+        let mut owned = 0usize;
         for base in iat::modules() {
             unsafe {
                 iat::visit_iat(base, is_xinput_module, |_stem, import, slot| {
                     let Some(f) = classify(import) else { return };
                     let idx = f as usize;
                     let current = *slot;
-                    if current.is_null() || current == detours[idx] {
+                    if current.is_null() {
+                        return;
+                    }
+                    if current == detours[idx] {
+                        owned += 1;
                         return;
                     }
                     IAT_ORIG[idx].store(current, Ordering::SeqCst);
                     if iat::write_slot(slot, detours[idx]).is_some() {
-                        patched += 1;
+                        owned += 1;
                     }
                 });
             }
         }
-        IAT_PATCHED.store(patched, Ordering::SeqCst);
+        IAT_HOOKED_SLOTS.store(owned, Ordering::SeqCst);
         IAT_SCANS.fetch_add(1, Ordering::Relaxed);
     }
 
@@ -352,9 +359,9 @@ mod imp {
     pub fn debug_lines() -> Vec<String> {
         let mut out = Vec::with_capacity(N + 1);
         out.push(format!(
-            "xinput: iat_scans={} iat_patched_slots={} assigned_slot={:?}",
+            "xinput: iat_scans={} iat_hooked_slots={} assigned_slot={:?}",
             IAT_SCANS.load(Ordering::Relaxed),
-            IAT_PATCHED.load(Ordering::SeqCst),
+            IAT_HOOKED_SLOTS.load(Ordering::SeqCst),
             state::xinput_slot(),
         ));
         for i in 0..N {

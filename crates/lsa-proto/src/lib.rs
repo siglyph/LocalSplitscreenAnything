@@ -20,6 +20,13 @@ pub const STATE_FILE: &str = "state.json";
 /// Bumped whenever the JSON shape changes incompatibly.
 pub const PROTO_VERSION: u32 = 1;
 
+/// Drop a leading UTF-8 byte-order mark. A text editor saving a hand-edited `instance.json` as
+/// "UTF-8 with BOM" would otherwise make `serde_json` reject the whole file, and the hook's
+/// hot-reload would silently keep the old config.
+fn strip_bom(s: &str) -> &str {
+    s.strip_prefix('\u{feff}').unwrap_or(s)
+}
+
 /// A rectangle in virtual-desktop pixel coordinates.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub struct PixelRect {
@@ -130,7 +137,7 @@ impl InstanceConfig {
     }
 
     pub fn from_json_str(s: &str) -> serde_json::Result<Self> {
-        serde_json::from_str(s)
+        serde_json::from_str(strip_bom(s))
     }
 
     /// Whether the hook should activate inside a process with this executable file name.
@@ -161,7 +168,7 @@ impl InstanceState {
     }
 
     pub fn from_json_str(s: &str) -> serde_json::Result<Self> {
-        serde_json::from_str(s)
+        serde_json::from_str(strip_bom(s))
     }
 }
 
@@ -188,6 +195,10 @@ mod tests {
         assert_eq!(back, cfg);
         assert!(back.targets_exe("game.EXE"));
         assert!(!back.targets_exe("steam.exe"));
+
+        // A hand-edit saved as UTF-8 with a BOM still parses (hot-reload robustness).
+        let with_bom = format!("\u{feff}{json}");
+        assert_eq!(InstanceConfig::from_json_str(&with_bom).unwrap(), cfg);
     }
 
     #[test]
